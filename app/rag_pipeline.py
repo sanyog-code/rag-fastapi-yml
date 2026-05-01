@@ -13,6 +13,8 @@ from langchain.chains import ConversationalRetrievalChain
 
 load_dotenv()
 
+IS_CI = os.getenv("CI") == "true"
+
 
 def load_chatdoctor_json(file_path: str):
     with open(file_path, "r", encoding="utf-8") as f:
@@ -20,24 +22,33 @@ def load_chatdoctor_json(file_path: str):
 
     documents = []
     for row in data:
-        text = f"""
-Instruction: {row.get('instruction', '')}
-Input: {row.get('input', '')}
-Output: {row.get('output', '')}
+        documents.append(
+            Document(
+                page_content=f"""
+Instruction: {row.get('instruction','')}
+Input: {row.get('input','')}
+Output: {row.get('output','')}
 """.strip()
-        documents.append(Document(page_content=text))
-
+            )
+        )
     return documents
 
 
 def create_rag_pipeline():
     print("🚀 Trainer-style RAG initialization started")
 
-    # ✅ LOCAL FILES ONLY KEPT
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={"local_files_only": True},
-    )
+    # ✅ KEY FIX: local vs CI handling
+    if IS_CI:
+        print("🌐 CI detected → allowing HuggingFace download")
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
+    else:
+        print("💻 Local run → using cached HuggingFace model only")
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"local_files_only": True},
+        )
 
     if os.path.exists("faiss_store"):
         print("✅ Loading existing FAISS index")
@@ -55,7 +66,6 @@ def create_rag_pipeline():
             chunk_size=300,
             chunk_overlap=60,
         )
-
         chunks = splitter.split_documents(docs)
 
         vectordb = FAISS.from_documents(chunks, embeddings)

@@ -4,7 +4,7 @@ from app.rag_pipeline import create_rag_pipeline
 
 app = FastAPI()
 
-# 🚀 TRAINER STYLE → pipeline created on startup
+# Trainer-style: build/load at startup
 qa_chain = create_rag_pipeline()
 
 
