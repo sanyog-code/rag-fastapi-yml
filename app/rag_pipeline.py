@@ -4,16 +4,15 @@ from dotenv import load_dotenv
 
 from langchain.schema import Document
 from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.memory import ConversationBufferMemory
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
-from langchain_community.embeddings import HuggingFaceEmbeddings
 
 load_dotenv()
 
-# ✅ Detect CI (GitHub Actions sets CI=true automatically)
 IS_CI = os.getenv("CI") == "true"
 
 
@@ -33,27 +32,29 @@ Output: {row.get('output', '')}
     return docs
 
 
-def create_rag_pipeline():
-    # ✅ NEVER run heavy ML code in CI
-    if IS_CI:
+def create_rag_pipeline(build_index: bool = False):
+    # ✅ Skip FAISS creation in normal CI
+    if IS_CI and not build_index:
         print("⚠️ CI detected → skipping RAG pipeline initialization")
         return None
 
-    print("✅ Local environment detected → loading RAG pipeline")
+    print("✅ Initializing RAG pipeline")
 
-    # ✅ LOCAL‑ONLY HF embeddings (uses cached model)
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2",
         model_kwargs={"local_files_only": True},
     )
 
     if os.path.exists("faiss_store"):
+        print("✅ Loading existing FAISS index")
         vectordb = FAISS.load_local(
             "faiss_store",
             embeddings,
             allow_dangerous_deserialization=True,
         )
     else:
+        print("🔨 Building FAISS index")
+
         docs = load_chatdoctor_json("data/chatdoctor5k.json")
 
         splitter = RecursiveCharacterTextSplitter(
@@ -103,7 +104,7 @@ Answer:
 """,
     )
 
-    print("✅ RAG pipeline initialized successfully")
+    print("✅ RAG pipeline ready")
 
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
