@@ -2,4 +2,6 @@ venv/
 __pycache__/
 faiss_store/
 .env
-*.pyc
+*.pyc# Environment variables
+.env
+ 
