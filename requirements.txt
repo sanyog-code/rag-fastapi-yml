@@ -21,3 +21,4 @@ pypdf==6.9.2
 
 # Optional search
 bm25
+sentence-transformers
