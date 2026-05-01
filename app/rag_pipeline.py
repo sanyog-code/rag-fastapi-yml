@@ -13,33 +13,27 @@ from langchain.chains import ConversationalRetrievalChain
 
 load_dotenv()
 
-IS_CI = os.getenv("CI") == "true"
 
-
-def load_chatdoctor_json(path: str):
-    with open(path, "r", encoding="utf-8") as f:
+def load_chatdoctor_json(file_path: str):
+    with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    docs = []
+    documents = []
     for row in data:
         text = f"""
 Instruction: {row.get('instruction', '')}
 Input: {row.get('input', '')}
 Output: {row.get('output', '')}
 """.strip()
-        docs.append(Document(page_content=text))
+        documents.append(Document(page_content=text))
 
-    return docs
+    return documents
 
 
-def create_rag_pipeline(build_index: bool = False):
-    # ✅ Skip FAISS creation in normal CI
-    if IS_CI and not build_index:
-        print("⚠️ CI detected → skipping RAG pipeline initialization")
-        return None
+def create_rag_pipeline():
+    print("🚀 Trainer-style RAG initialization started")
 
-    print("✅ Initializing RAG pipeline")
-
+    # ✅ LOCAL FILES ONLY KEPT
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2",
         model_kwargs={"local_files_only": True},
@@ -53,7 +47,7 @@ def create_rag_pipeline(build_index: bool = False):
             allow_dangerous_deserialization=True,
         )
     else:
-        print("🔨 Building FAISS index")
+        print("🔥 FAISS not found → TRAINING (CREATING INDEX)")
 
         docs = load_chatdoctor_json("data/chatdoctor5k.json")
 
@@ -61,15 +55,23 @@ def create_rag_pipeline(build_index: bool = False):
             chunk_size=300,
             chunk_overlap=60,
         )
+
         chunks = splitter.split_documents(docs)
 
         vectordb = FAISS.from_documents(chunks, embeddings)
         vectordb.save_local("faiss_store")
 
+        print("✅ FAISS TRAINING COMPLETED")
+
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash-lite",
         temperature=0.7,
         max_output_tokens=4000,
+    )
+
+    retriever = vectordb.as_retriever(
+        search_type="mmr",
+        search_kwargs={"k": 2},
     )
 
     memory = ConversationBufferMemory(
@@ -78,17 +80,12 @@ def create_rag_pipeline(build_index: bool = False):
         output_key="answer",
     )
 
-    retriever = vectordb.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": 2},
-    )
-
     prompt = PromptTemplate(
         input_variables=["context", "chat_history", "question"],
         template="""
 You are a medical consultant.
 Use ONLY the provided dataset.
-If the answer is not found, say:
+If information is not present, say:
 "The answer is not available in the provided context."
 
 Context:
@@ -104,7 +101,7 @@ Answer:
 """,
     )
 
-    print("✅ RAG pipeline ready")
+    print("✅ RAG pipeline initialised successfully")
 
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
