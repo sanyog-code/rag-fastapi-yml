@@ -1,5 +1,13 @@
+# Python virtual environment
 venv/
+
+# Python cache
 __pycache__/
-faiss_store/
-.env
 *.pyc
+
+# Vector DB
+faiss_store/
+
+# Environment variables
+.env
+``
